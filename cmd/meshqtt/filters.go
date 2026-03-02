@@ -15,9 +15,12 @@ type hopFilter struct {
 }
 
 type filters struct {
-	ports   map[pb.PortNum]struct{}
-	hop     hopFilter
-	nodeIDs map[uint32]struct{}
+	// portsInclude is an allow-list: if non-empty, only packets with these ports match.
+	portsInclude map[pb.PortNum]struct{}
+	// portsExclude is a deny-list: if non-empty, packets with these ports are filtered out.
+	portsExclude map[pb.PortNum]struct{}
+	hop          hopFilter
+	nodeIDs      map[uint32]struct{}
 }
 
 // activeFilters is configured at startup from CLI flags.
@@ -28,7 +31,8 @@ func parseFilters(portExpr, hopExpr, nodeExpr string) (filters, error) {
 
 	portExpr = strings.TrimSpace(portExpr)
 	if portExpr != "" {
-		f.ports = make(map[pb.PortNum]struct{})
+		f.portsInclude = make(map[pb.PortNum]struct{})
+		f.portsExclude = make(map[pb.PortNum]struct{})
 		parts := strings.Split(portExpr, ",")
 		for _, raw := range parts {
 			part := strings.TrimSpace(raw)
@@ -36,10 +40,22 @@ func parseFilters(portExpr, hopExpr, nodeExpr string) (filters, error) {
 				continue
 			}
 
+			neg := strings.HasPrefix(part, "!")
+			if neg {
+				part = strings.TrimSpace(part[1:])
+				if part == "" {
+					return f, fmt.Errorf("invalid port filter %q", raw)
+				}
+			}
+
 			// Try symbolic name first (e.g. TEXT_MESSAGE_APP)
 			name := strings.ToUpper(part)
 			if v, ok := pb.PortNum_value[name]; ok {
-				f.ports[pb.PortNum(v)] = struct{}{}
+				if neg {
+					f.portsExclude[pb.PortNum(v)] = struct{}{}
+				} else {
+					f.portsInclude[pb.PortNum(v)] = struct{}{}
+				}
 				continue
 			}
 
@@ -48,7 +64,11 @@ func parseFilters(portExpr, hopExpr, nodeExpr string) (filters, error) {
 			if err != nil {
 				return f, fmt.Errorf("invalid port filter %q", part)
 			}
-			f.ports[pb.PortNum(n)] = struct{}{}
+			if neg {
+				f.portsExclude[pb.PortNum(n)] = struct{}{}
+			} else {
+				f.portsInclude[pb.PortNum(n)] = struct{}{}
+			}
 		}
 	}
 
@@ -111,7 +131,7 @@ func (f filters) match(packet *pb.MeshPacket, decoded *pb.Data) bool {
 	// When any filter is active, only show packets where we have a decoded
 	// Data payload. This hides header-only/control packets and packets that
 	// are still encrypted/undecoded from filtered views.
-	if (f.hop.active || len(f.ports) > 0 || len(f.nodeIDs) > 0) && decoded == nil {
+	if (f.hop.active || len(f.portsInclude) > 0 || len(f.portsExclude) > 0 || len(f.nodeIDs) > 0) && decoded == nil {
 		return false
 	}
 
@@ -152,15 +172,25 @@ func (f filters) match(packet *pb.MeshPacket, decoded *pb.Data) bool {
 	}
 
 	// Port filter (requires decoded Data, either from MQTT or after decryption).
-	if len(f.ports) > 0 {
-		if decoded == nil {
-			// Can't tell the portnum if we failed to decode – treat as non-match.
-			return false
-		}
+	if decoded != nil {
 		port := decoded.GetPortnum()
-		if _, ok := f.ports[port]; !ok {
-			return false
+
+		// Include list: if set, only allow listed ports.
+		if len(f.portsInclude) > 0 {
+			if _, ok := f.portsInclude[port]; !ok {
+				return false
+			}
 		}
+
+		// Exclude list: if set, drop listed ports.
+		if len(f.portsExclude) > 0 {
+			if _, ok := f.portsExclude[port]; ok {
+				return false
+			}
+		}
+	} else if len(f.portsInclude) > 0 || len(f.portsExclude) > 0 {
+		// Can't tell the portnum if we failed to decode – treat as non-match.
+		return false
 	}
 
 	// Node filter: match if either From or To is in the configured set.
@@ -189,9 +219,7 @@ func parseNodeIDs(expr string) (map[uint32]struct{}, error) {
 		}
 
 		// Allow IDs in forms like "!9e7734d4", "9e7734d4", "0x9e7734d4".
-		if strings.HasPrefix(s, "!") {
-			s = s[1:]
-		}
+		s = strings.TrimPrefix(s, "!")
 		if strings.HasPrefix(s, "0x") || strings.HasPrefix(s, "0X") {
 			s = s[2:]
 		}

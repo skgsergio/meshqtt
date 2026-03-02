@@ -90,7 +90,68 @@ func onMessage(client mqtt.Client, msg mqtt.Message) {
 			}
 
 		case pb.PortNum_TRACEROUTE_APP:
-			fmt.Printf("  %s %s\n", bold(green("Traceroute:")), decoded.String())
+			// Traceroute requests use the mesh header (from/to) plus Data header fields,
+			// responses carry a RouteDiscovery message in the payload.
+			if len(payload) == 0 {
+				dest := decoded.GetDest()
+				if dest == 0 {
+					// Some firmwares don't populate Data.dest for traceroute; fall back to packet.To.
+					dest = packet.GetTo()
+				}
+
+				fmt.Printf("  %s request dest=!%08x want_response=%v bitfield=%d\n",
+					bold(green("Traceroute:")),
+					dest, decoded.GetWantResponse(), decoded.GetBitfield(),
+				)
+				if rid := decoded.GetRequestId(); rid != 0 {
+					fmt.Printf("    request_id=%d\n", rid)
+				}
+				break
+			}
+
+			var rd pb.RouteDiscovery
+			if err := proto.Unmarshal(payload, &rd); err != nil {
+				fmt.Printf("  %s <unable to decode RouteDiscovery payload: %v>\n",
+					bold(yellow("Traceroute:")), err)
+				fmt.Printf("    raw payload: %q\n", payload)
+				break
+			}
+
+			fmt.Printf("  %s response for request_id=%d bitfield=%d\n",
+				bold(green("Traceroute:")), decoded.GetRequestId(), decoded.GetBitfield(),
+			)
+
+			if route := rd.GetRoute(); len(route) > 0 {
+				parts := make([]string, len(route))
+				for i, n := range route {
+					parts[i] = fmt.Sprintf("!%08x", n)
+				}
+				fmt.Printf("    route: %s\n", strings.Join(parts, " -> "))
+			}
+
+			if snr := rd.GetSnrTowards(); len(snr) > 0 {
+				vals := make([]string, len(snr))
+				for i, v := range snr {
+					vals[i] = fmt.Sprintf("%.1f", float32(v)/4.0)
+				}
+				fmt.Printf("    snr: [%s] dB\n", strings.Join(vals, ", "))
+			}
+
+			if routeBack := rd.GetRouteBack(); len(routeBack) > 0 {
+				parts := make([]string, len(routeBack))
+				for i, n := range routeBack {
+					parts[i] = fmt.Sprintf("!%08x", n)
+				}
+				fmt.Printf("    route_back: %s\n", strings.Join(parts, " -> "))
+			}
+
+			if snrBack := rd.GetSnrBack(); len(snrBack) > 0 {
+				vals := make([]string, len(snrBack))
+				for i, v := range snrBack {
+					vals[i] = fmt.Sprintf("%.1f", float32(v)/4.0)
+				}
+				fmt.Printf("    snr_back: [%s] dB\n", strings.Join(vals, ", "))
+			}
 
 		case pb.PortNum_ROUTING_APP:
 			var routing pb.Routing
