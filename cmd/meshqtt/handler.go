@@ -23,26 +23,7 @@ func onMessage(client mqtt.Client, msg mqtt.Message) {
 	}
 
 	parts := strings.Split(msg.Topic(), "/")
-	channelName := ""
-	if len(parts) >= 5 {
-		channelName = parts[4]
-	}
-
-	from := packet.GetFrom()
-	to := packet.GetTo()
-
-	fmt.Printf("%s %s %s (Channel: %s)\n",
-		dim("["+time.Now().Format(time.RFC3339)+"]"),
-		bold(cyan("Topic:")),
-		cyan(msg.Topic()),
-		channelName,
-	)
-	fmt.Printf("  %s !%08x  %s !%08x  %s %d  %s %d\n",
-		bold("From:"), from,
-		bold("To:"), to,
-		bold("ID:"), packet.GetId(),
-		bold("Hop:"), packet.GetHopLimit(),
-	)
+	channelName := parts[len(parts)-2]
 
 	decoded := packet.GetDecoded()
 	if decoded == nil && packet.GetEncrypted() != nil {
@@ -61,6 +42,20 @@ func onMessage(client mqtt.Client, msg mqtt.Message) {
 		}
 	}
 
+	if !activeFilters.match(packet, decoded) {
+		return
+	}
+
+	fmt.Printf("%s %s %s (Channel: %s)\n",
+		dim("["+time.Now().Format(time.RFC3339)+"]"),
+		bold(cyan("Topic:")),
+		cyan(msg.Topic()),
+		channelName,
+	)
+	fmt.Printf("  %s !%08x -> !%08x\n", bold("Route:"), packet.GetFrom(), packet.GetTo())
+	fmt.Printf("  %s %d\n", bold("ID:"), packet.GetId())
+	fmt.Printf("  %s %d\n", bold("Hop:"), packet.GetHopLimit())
+
 	if decoded != nil {
 		portnum := decoded.GetPortnum()
 		payload := decoded.GetPayload()
@@ -69,6 +64,7 @@ func onMessage(client mqtt.Client, msg mqtt.Message) {
 		switch portnum {
 		case pb.PortNum_TEXT_MESSAGE_APP:
 			fmt.Printf("  %s %s\n", bold(green("Text:")), string(payload))
+
 		case pb.PortNum_POSITION_APP:
 			var pos pb.Position
 			if err := proto.Unmarshal(payload, &pos); err == nil {
@@ -77,6 +73,7 @@ func onMessage(client mqtt.Client, msg mqtt.Message) {
 					pos.GetLatitudeI(), pos.GetLongitudeI(), pos.GetAltitude(),
 				)
 			}
+
 		case pb.PortNum_NODEINFO_APP:
 			var user pb.User
 			if err := proto.Unmarshal(payload, &user); err == nil {
@@ -85,26 +82,34 @@ func onMessage(client mqtt.Client, msg mqtt.Message) {
 					user.GetLongName(), user.GetShortName(), user.GetId(),
 				)
 			}
+
 		case pb.PortNum_TELEMETRY_APP:
 			var tel pb.Telemetry
 			if err := proto.Unmarshal(payload, &tel); err == nil {
 				fmt.Printf("  %s %s\n", bold(green("Telemetry:")), tel.String())
 			}
+
+		case pb.PortNum_TRACEROUTE_APP:
+			fmt.Printf("  %s %s\n", bold(green("Traceroute:")), decoded.String())
+
 		case pb.PortNum_ROUTING_APP:
 			var routing pb.Routing
 			if err := proto.Unmarshal(payload, &routing); err == nil {
 				fmt.Printf("  %s %s\n", bold(green("Routing:")), routing.String())
 			}
+
 		case pb.PortNum_ADMIN_APP:
 			var admin pb.AdminMessage
 			if err := proto.Unmarshal(payload, &admin); err == nil {
 				fmt.Printf("  %s %s\n", bold(green("Admin:")), admin.String())
 			}
+
 		case pb.PortNum_WAYPOINT_APP:
 			var wp pb.Waypoint
 			if err := proto.Unmarshal(payload, &wp); err == nil {
 				fmt.Printf("  %s %s\n", bold(green("Waypoint:")), wp.String())
 			}
+
 		default:
 			// Unknown / unhandled port number but we did manage to decode a Data message.
 			// Show that something is there even if we don't have a specific formatter yet.
@@ -116,6 +121,6 @@ func onMessage(client mqtt.Client, msg mqtt.Message) {
 		// Neither decoded data nor encrypted bytes: a header-only / control packet.
 		fmt.Printf("  %s (no payload)\n", bold(yellow("Payload:")))
 	}
+
 	fmt.Println()
 }
-
