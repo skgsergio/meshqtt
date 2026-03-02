@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	broker := flag.String("broker", "tcp://mqtt.meshtastic.org:1883", "MQTT broker URL")
+	broker := flag.String("broker", "mqtt.meshtastic.org:1883", "MQTT broker URL")
 	user := flag.String("user", "meshdev", "MQTT user name")
 	password := flag.String("password", "large4cats", "MQTT password")
 	topic := flag.String("topic", "msh/EU_868/2/e/#", "MQTT topic to subscribe to")
