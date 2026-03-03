@@ -68,9 +68,13 @@ func onMessage(client mqtt.Client, msg mqtt.Message) {
 		case pb.PortNum_POSITION_APP:
 			var pos pb.Position
 			if err := proto.Unmarshal(payload, &pos); err == nil {
-				fmt.Printf("  %s Lat=%.7f, Lon=%.7f, Alt=%d\n",
+				lat := float64(pos.GetLatitudeI()) / 1e7
+				lon := float64(pos.GetLongitudeI()) / 1e7
+				mapsURL := fmt.Sprintf("https://maps.google.com/?q=%.7f,%.7f", lat, lon)
+				fmt.Printf("  %s Lat=%.7f, Lon=%.7f, Alt=%d (%s)\n",
 					bold(green("Position:")),
-					float64(pos.GetLatitudeI())/1e7, float64(pos.GetLongitudeI())/1e7, pos.GetAltitude(),
+					lat, lon, pos.GetAltitude(),
+					link("View on Google Maps", mapsURL),
 				)
 			}
 
@@ -168,7 +172,17 @@ func onMessage(client mqtt.Client, msg mqtt.Message) {
 		case pb.PortNum_WAYPOINT_APP:
 			var wp pb.Waypoint
 			if err := proto.Unmarshal(payload, &wp); err == nil {
-				fmt.Printf("  %s %s\n", bold(green("Waypoint:")), wp.String())
+				lat := float64(wp.GetLatitudeI()) / 1e7
+				lon := float64(wp.GetLongitudeI()) / 1e7
+				mapsURL := fmt.Sprintf("https://maps.google.com/?q=%.7f,%.7f", lat, lon)
+				fmt.Printf("  %s %s, Lat=%.7f, Lon=%.7f",
+					bold(green("Waypoint:")),
+					wp.GetName(), lat, lon,
+				)
+				if d := wp.GetDescription(); d != "" {
+					fmt.Printf(", Description=%s", d)
+				}
+				fmt.Printf(" (%s)\n", link("View on Google Maps", mapsURL))
 			}
 
 		default:

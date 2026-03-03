@@ -1,42 +1,44 @@
 package main
 
-import "github.com/fatih/color"
+import (
+	"os"
 
-// Small wrapper helpers around fatih/color so the rest of the code can stay
+	"github.com/muesli/termenv"
+)
+
+// Small wrapper helpers around termenv so the rest of the code can stay
 // simple and we can later centralize any behavior changes (e.g. disabling
 // colors when not on a TTY).
 
 var (
-	boldStyle    = color.New(color.Bold)
-	dimStyle     = color.New(color.Faint)
-	cyanStyle    = color.New(color.FgCyan)
-	greenStyle   = color.New(color.FgGreen)
-	magentaStyle = color.New(color.FgMagenta)
-	yellowStyle  = color.New(color.FgYellow)
+	output = termenv.NewOutput(os.Stdout)
+	p      = output.ColorProfile()
 )
 
 func bold(s string) string {
-	return boldStyle.Sprint(s)
+	return output.String(s).Bold().String()
 }
 
 func dim(s string) string {
-	return dimStyle.Sprint(s)
+	return output.String(s).Faint().String()
 }
 
 func cyan(s string) string {
-	return cyanStyle.Sprint(s)
+	return output.String(s).Foreground(p.Color("6")).String()
 }
 
 func green(s string) string {
-	return greenStyle.Sprint(s)
+	return output.String(s).Foreground(p.Color("2")).String()
 }
 
 func magenta(s string) string {
-	return magentaStyle.Sprint(s)
+	return output.String(s).Foreground(p.Color("5")).String()
 }
 
 func yellow(s string) string {
-	return yellowStyle.Sprint(s)
+	return output.String(s).Foreground(p.Color("3")).String()
 }
 
-
+func link(text, url string) string {
+	return output.Hyperlink(url, text)
+}

@@ -20,7 +20,8 @@ type filters struct {
 	// portsExclude is a deny-list: if non-empty, packets with these ports are filtered out.
 	portsExclude map[pb.PortNum]struct{}
 	hop          hopFilter
-	nodeIDs      map[uint32]struct{}
+	nodeInclude  map[uint32]struct{}
+	nodeExclude  map[uint32]struct{}
 
 	hideEmpty     bool
 	hideEncrypted bool
@@ -88,11 +89,12 @@ func parseFilters(portExpr, hopExpr, nodeExpr string, hideEmpty, hideEncrypted b
 
 	nodeExpr = strings.TrimSpace(nodeExpr)
 	if nodeExpr != "" {
-		ids, err := parseNodeIDs(nodeExpr)
+		inc, exc, err := parseNodeIDs(nodeExpr)
 		if err != nil {
 			return f, err
 		}
-		f.nodeIDs = ids
+		f.nodeInclude = inc
+		f.nodeExclude = exc
 	}
 
 	return f, nil
@@ -202,12 +204,25 @@ func (f filters) match(packet *pb.MeshPacket, decoded *pb.Data) bool {
 	}
 
 	// Node filter: match if either From or To is in the configured set.
-	if len(f.nodeIDs) > 0 {
+	if len(f.nodeInclude) > 0 || len(f.nodeExclude) > 0 {
 		from := packet.GetFrom()
 		to := packet.GetTo()
 
-		if _, ok := f.nodeIDs[from]; !ok {
-			if _, ok2 := f.nodeIDs[to]; !ok2 {
+		// Include list: if set, only allow listed nodes.
+		if len(f.nodeInclude) > 0 {
+			if _, ok := f.nodeInclude[from]; !ok {
+				if _, ok2 := f.nodeInclude[to]; !ok2 {
+					return false
+				}
+			}
+		}
+
+		// Exclude list: if set, drop listed nodes.
+		if len(f.nodeExclude) > 0 {
+			if _, ok := f.nodeExclude[from]; ok {
+				return false
+			}
+			if _, ok := f.nodeExclude[to]; ok {
 				return false
 			}
 		}
@@ -216,8 +231,9 @@ func (f filters) match(packet *pb.MeshPacket, decoded *pb.Data) bool {
 	return true
 }
 
-func parseNodeIDs(expr string) (map[uint32]struct{}, error) {
-	out := make(map[uint32]struct{})
+func parseNodeIDs(expr string) (map[uint32]struct{}, map[uint32]struct{}, error) {
+	inc := make(map[uint32]struct{})
+	exc := make(map[uint32]struct{})
 	parts := strings.Split(expr, ",")
 
 	for _, raw := range parts {
@@ -226,24 +242,27 @@ func parseNodeIDs(expr string) (map[uint32]struct{}, error) {
 			continue
 		}
 
-		// Allow IDs in forms like "!9e7734d4", "9e7734d4", "0x9e7734d4".
-		s = strings.TrimPrefix(s, "!")
-		if strings.HasPrefix(s, "0x") || strings.HasPrefix(s, "0X") {
-			s = s[2:]
+		neg := strings.HasPrefix(s, "!")
+		if neg {
+			s = strings.TrimSpace(s[1:])
 		}
 
 		if len(s) == 0 {
-			return nil, fmt.Errorf("invalid node ID %q", raw)
+			return nil, nil, fmt.Errorf("invalid node ID %q", raw)
 		}
 
 		n, err := strconv.ParseUint(s, 16, 32)
 		if err != nil {
-			return nil, fmt.Errorf("invalid node ID %q", raw)
+			return nil, nil, fmt.Errorf("invalid node ID %q", raw)
 		}
 
-		out[uint32(n)] = struct{}{}
+		if neg {
+			exc[uint32(n)] = struct{}{}
+		} else {
+			inc[uint32(n)] = struct{}{}
+		}
 	}
 
-	return out, nil
+	return inc, exc, nil
 }
 
