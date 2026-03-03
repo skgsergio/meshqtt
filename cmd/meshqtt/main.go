@@ -21,11 +21,13 @@ func main() {
 	portFilter := flag.String("filter-port", "", "Comma-separated list of port names or numbers (e.g. TEXT_MESSAGE_APP,POSITION_APP,1,3)")
 	hopFilter := flag.String("filter-hop", "", "Hop filter expression, e.g. \">0\", \"<=3\", \"==1\"")
 	nodeFilter := flag.String("filter-node", "", "Comma-separated list of node IDs in hex; matches if either From or To equals any of them (e.g. !9e7734d4,9e780c80)")
+	filterEmpty := flag.Bool("filter-empty", false, "Filter out packets with no payload")
+	filterEncrypted := flag.Bool("filter-encrypted", false, "Filter out packets that are still encrypted")
 	flag.Var(&keys, "channel-key", "Channel keys in format ChannelName:Base64Key (can be specified multiple times)")
 	flag.Parse()
 
 	// Configure filtering based on CLI flags.
-	if f, err := parseFilters(*portFilter, *hopFilter, *nodeFilter); err != nil {
+	if f, err := parseFilters(*portFilter, *hopFilter, *nodeFilter, *filterEmpty, *filterEncrypted); err != nil {
 		log.Fatalf("invalid filters: %v", err)
 	} else {
 		activeFilters = f

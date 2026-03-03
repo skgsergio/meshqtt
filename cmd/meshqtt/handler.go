@@ -68,9 +68,9 @@ func onMessage(client mqtt.Client, msg mqtt.Message) {
 		case pb.PortNum_POSITION_APP:
 			var pos pb.Position
 			if err := proto.Unmarshal(payload, &pos); err == nil {
-				fmt.Printf("  %s Lat=%d, Lon=%d, Alt=%d\n",
+				fmt.Printf("  %s Lat=%.7f, Lon=%.7f, Alt=%d\n",
 					bold(green("Position:")),
-					pos.GetLatitudeI(), pos.GetLongitudeI(), pos.GetAltitude(),
+					float64(pos.GetLatitudeI())/1e7, float64(pos.GetLongitudeI())/1e7, pos.GetAltitude(),
 				)
 			}
 

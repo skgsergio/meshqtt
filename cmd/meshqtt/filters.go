@@ -21,13 +21,18 @@ type filters struct {
 	portsExclude map[pb.PortNum]struct{}
 	hop          hopFilter
 	nodeIDs      map[uint32]struct{}
+
+	hideEmpty     bool
+	hideEncrypted bool
 }
 
 // activeFilters is configured at startup from CLI flags.
 var activeFilters filters
 
-func parseFilters(portExpr, hopExpr, nodeExpr string) (filters, error) {
+func parseFilters(portExpr, hopExpr, nodeExpr string, hideEmpty, hideEncrypted bool) (filters, error) {
 	var f filters
+	f.hideEmpty = hideEmpty
+	f.hideEncrypted = hideEncrypted
 
 	portExpr = strings.TrimSpace(portExpr)
 	if portExpr != "" {
@@ -128,10 +133,11 @@ func parseHopFilter(expr string) (hopFilter, error) {
 }
 
 func (f filters) match(packet *pb.MeshPacket, decoded *pb.Data) bool {
-	// When any filter is active, only show packets where we have a decoded
-	// Data payload. This hides header-only/control packets and packets that
-	// are still encrypted/undecoded from filtered views.
-	if (f.hop.active || len(f.portsInclude) > 0 || len(f.portsExclude) > 0 || len(f.nodeIDs) > 0) && decoded == nil {
+	// Explicit payload-type filters
+	if f.hideEmpty && decoded == nil && packet.GetEncrypted() == nil {
+		return false
+	}
+	if f.hideEncrypted && decoded == nil && packet.GetEncrypted() != nil {
 		return false
 	}
 
@@ -172,7 +178,12 @@ func (f filters) match(packet *pb.MeshPacket, decoded *pb.Data) bool {
 	}
 
 	// Port filter (requires decoded Data, either from MQTT or after decryption).
-	if decoded != nil {
+	if len(f.portsInclude) > 0 || len(f.portsExclude) > 0 {
+		if decoded == nil {
+			// Can't tell the portnum if we failed to decode – treat as non-match.
+			return false
+		}
+
 		port := decoded.GetPortnum()
 
 		// Include list: if set, only allow listed ports.
@@ -188,9 +199,6 @@ func (f filters) match(packet *pb.MeshPacket, decoded *pb.Data) bool {
 				return false
 			}
 		}
-	} else if len(f.portsInclude) > 0 || len(f.portsExclude) > 0 {
-		// Can't tell the portnum if we failed to decode – treat as non-match.
-		return false
 	}
 
 	// Node filter: match if either From or To is in the configured set.
