@@ -51,11 +51,11 @@ meshqtt
 
 | Flag                | Description                                    | Default                    |
 |---------------------|------------------------------------------------|----------------------------|
-| `-broker`           | MQTT broker URL                                | `mqtt.meshtastic.org:1883` |
-| `-user`             | MQTT user name                                 | `meshdev`                  |
-| `-password`         | MQTT password                                  | `large4cats`               |
-| `-topic`            | MQTT topic to subscribe to                     | `msh/EU_868/2/e/#`         |
-| `-client-id`        | MQTT client ID                                 | `meshqtt-<timestamp>`      |
+| `-mqtt-broker`      | MQTT broker URL                                | `mqtt.meshtastic.org:1883` |
+| `-mqtt-user`        | MQTT user name                                 | `meshdev`                  |
+| `-mqtt-password`    | MQTT password                                  | `large4cats`               |
+| `-mqtt-topic`       | MQTT topic to subscribe to                     | `msh/EU_868/2/e/#`         |
+| `-mqtt-client-id`   | MQTT client ID                                 | `meshqtt-<timestamp>`      |
 | `-channel-key`      | Channel keys (Format: `ChannelName:Base64Key`) | -                          |
 | `-filter-port`      | Comma-separated list of port names or numbers  | -                          |
 | `-filter-node`      | Comma-separated list of hex node IDs           | -                          |
@@ -80,7 +80,7 @@ meshqtt -filter-hop ">1"
 **Connect to a custom broker and subscribe to a specific channel:**
 
 ```bash
-meshqtt -broker 192.168.1.50:1883 -topic "msh/US/2/c/LongFast/#"
+meshqtt -mqtt-broker 192.168.1.50:1883 -mqtt-topic "msh/US/2/c/LongFast/#"
 ```
 
 **Decrypt messages for a specific channel:**
