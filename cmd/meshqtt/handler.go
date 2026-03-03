@@ -42,7 +42,7 @@ func onMessage(client mqtt.Client, msg mqtt.Message) {
 		}
 	}
 
-	if !activeFilters.match(packet, decoded) {
+	if !activeFilters.match(packet, decoded, channelName) {
 		return
 	}
 

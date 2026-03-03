@@ -15,13 +15,19 @@ type hopFilter struct {
 }
 
 type filters struct {
+	hop          hopFilter
 	// portsInclude is an allow-list: if non-empty, only packets with these ports match.
 	portsInclude map[pb.PortNum]struct{}
 	// portsExclude is a deny-list: if non-empty, packets with these ports are filtered out.
 	portsExclude map[pb.PortNum]struct{}
-	hop          hopFilter
+	// nodeInclude is an allow-list: if non-empty, only packets where From or To matches these IDs are kept.
 	nodeInclude  map[uint32]struct{}
+	// nodeExclude is a deny-list: if non-empty, packets where From or To matches these IDs are dropped.
 	nodeExclude  map[uint32]struct{}
+	// channelsInclude is an allow-list: if non-empty, only packets with these channel names match.
+	channelsInclude map[string]struct{}
+	// channelsExclude is a deny-list: if non-empty, packets with these channel names are filtered out.
+	channelsExclude map[string]struct{}
 
 	hideEmpty     bool
 	hideEncrypted bool
@@ -30,7 +36,7 @@ type filters struct {
 // activeFilters is configured at startup from CLI flags.
 var activeFilters filters
 
-func parseFilters(portExpr, hopExpr, nodeExpr string, hideEmpty, hideEncrypted bool) (filters, error) {
+func parseFilters(portExpr, hopExpr, nodeExpr, channelExpr string, hideEmpty, hideEncrypted bool) (filters, error) {
 	var f filters
 	f.hideEmpty = hideEmpty
 	f.hideEncrypted = hideEncrypted
@@ -97,6 +103,33 @@ func parseFilters(portExpr, hopExpr, nodeExpr string, hideEmpty, hideEncrypted b
 		f.nodeExclude = exc
 	}
 
+	channelExpr = strings.TrimSpace(channelExpr)
+	if channelExpr != "" {
+		f.channelsInclude = make(map[string]struct{})
+		f.channelsExclude = make(map[string]struct{})
+		parts := strings.Split(channelExpr, ",")
+		for _, raw := range parts {
+			part := strings.TrimSpace(raw)
+			if part == "" {
+				continue
+			}
+
+			neg := strings.HasPrefix(part, "!")
+			if neg {
+				part = strings.TrimSpace(part[1:])
+				if part == "" {
+					return f, fmt.Errorf("invalid channel filter %q", raw)
+				}
+			}
+
+			if neg {
+				f.channelsExclude[part] = struct{}{}
+			} else {
+				f.channelsInclude[part] = struct{}{}
+			}
+		}
+	}
+
 	return f, nil
 }
 
@@ -134,13 +167,32 @@ func parseHopFilter(expr string) (hopFilter, error) {
 	}, nil
 }
 
-func (f filters) match(packet *pb.MeshPacket, decoded *pb.Data) bool {
+func (f filters) match(packet *pb.MeshPacket, decoded *pb.Data, channelName string) bool {
 	// Explicit payload-type filters
 	if f.hideEmpty && decoded == nil && packet.GetEncrypted() == nil {
 		return false
 	}
 	if f.hideEncrypted && decoded == nil && packet.GetEncrypted() != nil {
 		return false
+	}
+
+	// Channel filter
+	if len(f.channelsInclude) > 0 || len(f.channelsExclude) > 0 {
+		// Include list: if set, only allow listed channels (allow-list).
+		// If both include and exclude lists are set, a channel name must be in 
+		// the include list AND NOT in the exclude list to match.
+		if len(f.channelsInclude) > 0 {
+			if _, ok := f.channelsInclude[channelName]; !ok {
+				return false
+			}
+		}
+
+		// Exclude list: if set, drop listed channels (deny-list).
+		if len(f.channelsExclude) > 0 {
+			if _, ok := f.channelsExclude[channelName]; ok {
+				return false
+			}
+		}
 	}
 
 	// Hop filter (always available from the packet header)
@@ -188,14 +240,14 @@ func (f filters) match(packet *pb.MeshPacket, decoded *pb.Data) bool {
 
 		port := decoded.GetPortnum()
 
-		// Include list: if set, only allow listed ports.
+		// Include list: if set, only allow listed ports (allow-list).
 		if len(f.portsInclude) > 0 {
 			if _, ok := f.portsInclude[port]; !ok {
 				return false
 			}
 		}
 
-		// Exclude list: if set, drop listed ports.
+		// Exclude list: if set, drop listed ports (deny-list).
 		if len(f.portsExclude) > 0 {
 			if _, ok := f.portsExclude[port]; ok {
 				return false
@@ -208,7 +260,8 @@ func (f filters) match(packet *pb.MeshPacket, decoded *pb.Data) bool {
 		from := packet.GetFrom()
 		to := packet.GetTo()
 
-		// Include list: if set, only allow listed nodes.
+		// Include list: if set, only allow listed nodes (allow-list).
+		// Match is successful if either From or To is in the include list.
 		if len(f.nodeInclude) > 0 {
 			if _, ok := f.nodeInclude[from]; !ok {
 				if _, ok2 := f.nodeInclude[to]; !ok2 {
@@ -217,7 +270,8 @@ func (f filters) match(packet *pb.MeshPacket, decoded *pb.Data) bool {
 			}
 		}
 
-		// Exclude list: if set, drop listed nodes.
+		// Exclude list: if set, drop listed nodes (deny-list).
+		// If either From or To is in the exclude list, the packet is dropped.
 		if len(f.nodeExclude) > 0 {
 			if _, ok := f.nodeExclude[from]; ok {
 				return false

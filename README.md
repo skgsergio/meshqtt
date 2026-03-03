@@ -11,6 +11,7 @@ A powerful CLI tool to monitor and filter [Meshtastic](https://meshtastic.org/) 
 - **Advanced Filtering:**
   - **Port Filter:** Filter by application port names or numbers (e.g., `TEXT_MESSAGE_APP`, `POSITION_APP`, `1`, `3`). Supports negation with `!` (e.g., `!TELEMETRY_APP`).
   - **Node Filter:** Filter by specific hex node IDs (without `0x` or `!`). Matches if either the sender or receiver node ID matches. Supports negation with `!` (e.g., `!9e7734d4` to exclude).
+  - **Channel Filter:** Filter by channel name (e.g., `LongFast`, `Private`). Supports negation with `!` (e.g., `!LongFast`).
   - **Hop Filter:** Filter based on hop count expressions (e.g., `>0`, `<=3`, `==1`).
   - **Encryption/Empty Status:** Option to filter out packets with no payload.
 - **Comprehensive Protobuf Support:** Decodes and displays:
@@ -59,6 +60,7 @@ meshqtt
 | `-channel-key`      | Channel keys (Format: `ChannelName:Base64Key`) | -                          |
 | `-filter-port`      | Comma-separated list of port names or numbers  | -                          |
 | `-filter-node`      | Comma-separated list of hex node IDs           | -                          |
+| `-filter-channel`   | Comma-separated list of channel names          | -                          |
 | `-filter-hop`       | Hop filter expression (e.g. `>0`, `<=3`)       | -                          |
 | `-filter-empty`     | Filter out packets with no payload             | `false`                    |
 | `-filter-encrypted` | Filter out packets that are still encrypted    | `false`                    |
@@ -69,6 +71,12 @@ meshqtt
 
 ```bash
 meshqtt -filter-port TEXT_MESSAGE_APP,POSITION_APP -filter-node !9e7734d4
+```
+
+**Filter for messages from a specific channel:**
+
+```bash
+meshqtt -filter-channel LongFast
 ```
 
 **Filter for messages with more than 1 hop:**
