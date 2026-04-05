@@ -34,6 +34,8 @@ func main() {
 		activeFilters = f
 	}
 
+	printFilterSummary()
+
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(*broker)
 	opts.SetUsername(*user)

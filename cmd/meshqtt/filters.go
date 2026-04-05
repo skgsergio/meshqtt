@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -15,15 +16,15 @@ type hopFilter struct {
 }
 
 type filters struct {
-	hop          hopFilter
+	hop hopFilter
 	// portsInclude is an allow-list: if non-empty, only packets with these ports match.
 	portsInclude map[pb.PortNum]struct{}
 	// portsExclude is a deny-list: if non-empty, packets with these ports are filtered out.
 	portsExclude map[pb.PortNum]struct{}
 	// nodeInclude is an allow-list: if non-empty, only packets where From or To matches these IDs are kept.
-	nodeInclude  map[uint32]struct{}
+	nodeInclude map[uint32]struct{}
 	// nodeExclude is a deny-list: if non-empty, packets where From or To matches these IDs are dropped.
-	nodeExclude  map[uint32]struct{}
+	nodeExclude map[uint32]struct{}
 	// channelsInclude is an allow-list: if non-empty, only packets with these channel names match.
 	channelsInclude map[string]struct{}
 	// channelsExclude is a deny-list: if non-empty, packets with these channel names are filtered out.
@@ -179,7 +180,7 @@ func (f filters) match(packet *pb.MeshPacket, decoded *pb.Data, channelName stri
 	// Channel filter
 	if len(f.channelsInclude) > 0 || len(f.channelsExclude) > 0 {
 		// Include list: if set, only allow listed channels (allow-list).
-		// If both include and exclude lists are set, a channel name must be in 
+		// If both include and exclude lists are set, a channel name must be in
 		// the include list AND NOT in the exclude list to match.
 		if len(f.channelsInclude) > 0 {
 			if _, ok := f.channelsInclude[channelName]; !ok {
@@ -320,3 +321,74 @@ func parseNodeIDs(expr string) (map[uint32]struct{}, map[uint32]struct{}, error)
 	return inc, exc, nil
 }
 
+func (f filters) hasActiveFilters() bool {
+	return len(f.portsInclude) > 0 || len(f.portsExclude) > 0 ||
+		f.hop.active || len(f.nodeInclude) > 0 || len(f.nodeExclude) > 0 ||
+		len(f.channelsInclude) > 0 || len(f.channelsExclude) > 0 ||
+		f.hideEmpty || f.hideEncrypted
+}
+
+func printFilterSummary() {
+	if !activeFilters.hasActiveFilters() && len(keys) == 0 {
+		return
+	}
+
+	fmt.Println("Filter Summary:")
+	fmt.Println("---------------")
+
+	printMap("  Channels (include):", activeFilters.channelsInclude)
+	printMap("  Channels (exclude):", activeFilters.channelsExclude)
+	printMap("  Nodes (include):", activeFilters.nodeInclude, formatNode)
+	printMap("  Nodes (exclude):", activeFilters.nodeExclude, formatNode)
+	printMap("  Ports (include):", activeFilters.portsInclude)
+	printMap("  Ports (exclude):", activeFilters.portsExclude)
+
+	if activeFilters.hop.active {
+		fmt.Printf("  Hop: %s %d\n", activeFilters.hop.op, activeFilters.hop.value)
+	}
+
+	if activeFilters.hideEmpty {
+		fmt.Println("  Empty payloads: hide")
+	}
+
+	if activeFilters.hideEncrypted {
+		fmt.Println("  Encrypted payloads: hide")
+	}
+
+	if len(keys) > 0 {
+		fmt.Printf("  Keys: %s\n", formatKeys(keys))
+	}
+
+	fmt.Println()
+}
+
+func printMap[K comparable](label string, m map[K]struct{}, formatFn ...func(K) string) {
+	if len(m) == 0 {
+		return
+	}
+
+	var format func(K) string
+	if len(formatFn) > 0 {
+		format = formatFn[0]
+	} else {
+		format = func(k K) string { return fmt.Sprint(k) }
+	}
+
+	var vals []string
+	for k := range m {
+		vals = append(vals, format(k))
+	}
+	fmt.Printf("%s %s\n", label, strings.Join(vals, ", "))
+}
+
+func formatNode(n uint32) string {
+	return fmt.Sprintf("!%x (%d)", n, n)
+}
+
+func formatKeys(m map[string][]byte) string {
+	var entries []string
+	for name, key := range m {
+		entries = append(entries, fmt.Sprintf("%s:%s", name, hex.EncodeToString(key)))
+	}
+	return strings.Join(entries, ", ")
+}
