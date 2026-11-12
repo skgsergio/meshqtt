@@ -4,10 +4,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math/rand/v2"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
@@ -17,7 +17,7 @@ func main() {
 	user := flag.String("mqtt-user", "meshdev", "MQTT user name")
 	password := flag.String("mqtt-password", "large4cats", "MQTT password")
 	topic := flag.String("mqtt-topic", "msh/EU_868/2/e/#", "MQTT topic to subscribe to")
-	clientID := flag.String("mqtt-client-id", fmt.Sprintf("meshqtt-%d", time.Now().Unix()), "MQTT client ID")
+	clientID := flag.String("mqtt-client-id", fmt.Sprintf("!%08x", rand.Uint32()), "MQTT client ID (default: random node ID like the firmware uses)")
 	portFilter := flag.String("filter-port", "", "Comma-separated list of port names or numbers (e.g. TEXT_MESSAGE_APP,POSITION_APP,1,3). Supports negation with ! (e.g. !TELEMETRY_APP)")
 	hopFilter := flag.String("filter-hop", "", "Hop filter expression, e.g. \">0\", \"<=3\", \"==1\"")
 	nodeFilter := flag.String("filter-node", "", "Comma-separated list of hex node IDs (without ! or 0x). Matches if From or To equals any of them. Supports negation with ! (e.g. !9e7734d4 to exclude)")

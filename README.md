@@ -56,7 +56,7 @@ meshqtt
 | `-mqtt-user`        | MQTT user name                                 | `meshdev`                  |
 | `-mqtt-password`    | MQTT password                                  | `large4cats`               |
 | `-mqtt-topic`       | MQTT topic to subscribe to                     | `msh/EU_868/2/e/#`         |
-| `-mqtt-client-id`   | MQTT client ID                                 | `meshqtt-<timestamp>`      |
+| `-mqtt-client-id`   | MQTT client ID                                 | `!<random 8 hex>`          |
 | `-channel-key`      | Channel keys (Format: `ChannelName:Base64Key`) | -                          |
 | `-filter-port`      | Comma-separated list of port names or numbers  | -                          |
 | `-filter-node`      | Comma-separated list of hex node IDs           | -                          |
